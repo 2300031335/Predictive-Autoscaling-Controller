@@ -202,6 +202,21 @@ def metrics():
     return Response(content=payload, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
+@app.get("/download/zip", summary="Download Project ZIP Archive")
+def download_project_zip():
+    zip_path = Path("Predictive-Autoscaling-Controller.zip")
+    if not zip_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project zip archive not found.",
+        )
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="Predictive-Autoscaling-Controller.zip",
+    )
+
+
 @app.get("/experiments/plot", summary="Get Experiment Comparison Visualization PNG")
 def get_experiment_plot():
     plot_file = Path("experiments/results/scaling_comparison_plot.png")
