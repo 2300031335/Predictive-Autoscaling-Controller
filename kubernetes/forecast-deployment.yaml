@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictive-controller
+  namespace: predictive-system
+  labels:
+    app: predictive-controller
+    component: ml-scaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predictive-controller
+  template:
+    metadata:
+      labels:
+        app: predictive-controller
+        component: ml-scaler
+    spec:
+      containers:
+      - name: controller
+        image: predictive-autoscaler:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http-api
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: APP_PORT
+          value: "8000"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: SAFE_CAPACITY_PER_REPLICA
+          value: "25.0"
+        - name: SAFETY_MARGIN_PERCENT
+          value: "0.15"
+        - name: MIN_REPLICAS
+          value: "1"
+        - name: MAX_REPLICAS
+          value: "10"
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10

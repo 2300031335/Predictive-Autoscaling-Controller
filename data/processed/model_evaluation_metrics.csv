@@ -1,0 +1,4 @@
+model,sample_count,mae,rmse,mape_percent,smape_percent,max_under_prediction_rps,max_over_prediction_rps
+Prophet,30,41.4903,61.9258,37.52,48.58,128.07,24.05
+PyTorch_LSTM,30,48.5747,51.2382,70.64,55.66,80.25,62.09
+Naive_Persistence_Baseline,30,22.5481,48.5478,30.05,22.13,108.42,109.67

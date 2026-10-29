@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "trace_file": "./data/sample/workload_composite.csv",
+    "trace_provenance_hash": "2d50661ce292f5d3d1c7d664669a08aa4b85f1c25644a552f7f8f9c4d1fae791",
+    "records": 900,
+    "executed_at": "2026-10-29T16:11:30.583391+00:00"
+  },
+  "experiments": [
+    {
+      "policy": "REACTIVE_HPA",
+      "total_requests": 800860,
+      "successful_transactions": 790837,
+      "failed_requests": 10022,
+      "service_error_rate_percent": 1.251,
+      "slo_adherence_percent": 97.89,
+      "latency_p50_ms": 24.79,
+      "latency_p95_ms": 34.45,
+      "latency_p99_ms": 704.43,
+      "total_pod_hours": 13.7861,
+      "total_cost_usd": 0.5514,
+      "resource_efficiency_pod_hours_per_100k_tx": 1.7432,
+      "overprovisioned_pod_hours": 5.0066,
+      "scaling_delay_seconds": 250
+    },
+    {
+      "policy": "PREDICTIVE_PROPHET",
+      "total_requests": 800860,
+      "successful_transactions": 799111,
+      "failed_requests": 1748,
+      "service_error_rate_percent": 0.218,
+      "slo_adherence_percent": 99.67,
+      "latency_p50_ms": 26.16,
+      "latency_p95_ms": 54.11,
+      "latency_p99_ms": 106.72,
+      "total_pod_hours": 11.6889,
+      "total_cost_usd": 0.4676,
+      "resource_efficiency_pod_hours_per_100k_tx": 1.4627,
+      "overprovisioned_pod_hours": 2.8133,
+      "scaling_delay_seconds": 290
+    },
+    {
+      "policy": "PREDICTIVE_LSTM",
+      "total_requests": 800860,
+      "successful_transactions": 799111,
+      "failed_requests": 1748,
+      "service_error_rate_percent": 0.218,
+      "slo_adherence_percent": 99.67,
+      "latency_p50_ms": 26.16,
+      "latency_p95_ms": 54.11,
+      "latency_p99_ms": 106.72,
+      "total_pod_hours": 11.6889,
+      "total_cost_usd": 0.4676,
+      "resource_efficiency_pod_hours_per_100k_tx": 1.4627,
+      "overprovisioned_pod_hours": 2.8133,
+      "scaling_delay_seconds": 290
+    }
+  ]
+}

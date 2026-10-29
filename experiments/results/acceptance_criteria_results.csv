@@ -1,0 +1,7 @@
+KPI_Number,Criterion,Baseline (Reactive),Predictive (Prophet),Difference / Ratio,Target Rule,Status
+1,SLO Adherence,97.89%,99.67%,+1.78 pp,>= +3.0 pp (or >= -1.0 pp if eff >= 20%),FAIL
+2,Resource Efficiency,1.7432 pod-hrs/100k,1.4627 pod-hrs/100k,+16.09%,>= 20% improvement,FAIL
+3,Over-provisioned Hours,5.0066 hrs,2.8133 hrs,56.2% of baseline,<= 80-85% of baseline,PASS
+4,Scaling Delay Reduction,250s deficit,290s deficit,-16.0% delay reduction,Delay < baseline,FAIL
+5,Successful Transactions,"790,837","799,111",+1.05%,tx >= baseline,PASS
+6,Service Error Rate,1.251%,0.218%,17.4% of baseline,<= 80% of baseline,PASS

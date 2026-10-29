@@ -1,0 +1,39 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: sample-app-predictive-scaler
+  namespace: predictive-system
+  labels:
+    strategy: predictive-keda
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sample-app
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  cooldownPeriod: 180
+  pollingInterval: 15
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: keda-hpa-sample-app-predictive
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: 3
+            periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 180
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+  triggers:
+  - type: metrics-api
+    metadata:
+      targetValue: "1"
+      url: "http://predictive-controller-service.predictive-system.svc.cluster.local:8000/metrics/keda"
+      valueLocation: "value"
+      format: "json"

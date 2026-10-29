@@ -1,0 +1,87 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Demand: Incoming vs Predicted RPS",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "incoming_requests_per_second", "legendFormat": "Actual Incoming RPS" },
+        { "expr": "predicted_demand_rps", "legendFormat": "Predicted Demand RPS" }
+      ]
+    },
+    {
+      "title": "Replica Dynamics: Current vs Desired Replicas",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "current_replicas", "legendFormat": "Current Pod Replicas" },
+        { "expr": "desired_replicas", "legendFormat": "Desired Pod Replicas" }
+      ]
+    },
+    {
+      "title": "Application Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "request_latency_ms_current", "legendFormat": "Latency (ms)" }
+      ]
+    },
+    {
+      "title": "Forecast Error (MAPE %)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        { "expr": "forecast_error_mape", "legendFormat": "MAPE %" }
+      ]
+    },
+    {
+      "title": "Error Rate & Health Status",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        { "expr": "error_rate", "legendFormat": "HTTP Error Rate" },
+        { "expr": "controller_health_status", "legendFormat": "Controller Health" }
+      ]
+    },
+    {
+      "title": "CPU and Memory Utilization (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "cpu_utilization_percent", "legendFormat": "CPU %" },
+        { "expr": "memory_utilization_percent", "legendFormat": "Memory %" }
+      ]
+    },
+    {
+      "title": "Resource Consumption (Pod-Hours)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "resource_hours_total", "legendFormat": "Pod-Hours Total" }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["autoscaling", "keda", "prophet"],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m"]
+  },
+  "timezone": "utc",
+  "title": "Predictive Autoscaling Performance Dashboard",
+  "version": 1
+}

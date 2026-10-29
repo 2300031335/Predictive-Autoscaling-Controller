@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  predictive-controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: predictive-autoscaler
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - APP_PORT=8000
+      - LOG_LEVEL=INFO
+      - FORECAST_HORIZON_MINUTES=5
+      - FORECAST_INTERVAL_SECONDS=60
+      - SAFE_CAPACITY_PER_REPLICA=25.0
+      - SAFETY_MARGIN_PERCENT=0.15
+      - MIN_REPLICAS=1
+      - MAX_REPLICAS=10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  sample-app:
+    image: hashicorp/http-echo:0.2.3
+    container_name: sample-app
+    ports:
+      - "5678:5678"
+    command: ["-text=Application replica healthy", "-listen=:5678"]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: autoscaler-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./kubernetes/prometheus/prometheus-config.yaml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: autoscaler-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./kubernetes/grafana/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped

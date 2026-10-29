@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: predictive-system
+  labels:
+    app: sample-app
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+        tier: backend
+    spec:
+      containers:
+      - name: sample-app
+        image: hashicorp/http-echo:0.2.3
+        args:
+        - "-text=Application pod serving response"
+        - "-listen=:5678"
+        ports:
+        - containerPort: 5678
+          name: http
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5678
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5678
+          initialDelaySeconds: 3
+          periodSeconds: 5
