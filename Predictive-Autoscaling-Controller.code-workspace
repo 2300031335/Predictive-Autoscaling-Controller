@@ -1,0 +1,11 @@
+{
+  "folders": [
+    {
+      "name": "Predictive Autoscaling Controller",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "window.title": "Predictive Autoscaling Controller - ${dirty}${activeEditorShort}${separator}${rootName}"
+  }
+}

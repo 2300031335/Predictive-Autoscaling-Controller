@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # Application Info
-    APP_NAME: str = Field(default="predictive-autoscaler", description="Name of the service")
+    APP_NAME: str = Field(default="Predictive Autoscaling Controller", description="Name of the service")
     APP_ENV: str = Field(default="development", description="Environment: development, test, production")
     APP_HOST: str = Field(default="0.0.0.0", description="Host to bind HTTP server")
     APP_PORT: int = Field(default=8000, description="Port to bind HTTP server")

@@ -1,0 +1,11 @@
+{
+  "name": "predictive-autoscaling-controller",
+  "displayName": "Predictive Autoscaling Controller",
+  "version": "1.0.0",
+  "description": "Predictive Autoscaling with Load Forecasting for Kubernetes and KEDA",
+  "main": "app/main.py",
+  "scripts": {
+    "start": "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "test": "pytest tests/ -v"
+  }
+}
