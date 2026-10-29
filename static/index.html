@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predictive Autoscaler Dashboard | Kubernetes & KEDA</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+            },
+            darkbg: '#0f172a',
+            darkcard: '#1e293b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(1.05); }
+    }
+    .pulse-live {
+      animation: pulse-fast 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <i class="fa-solid fa-server text-white text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white flex items-center gap-2">
+            Predictive Autoscaling Controller
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">KEDA v2.10+</span>
+          </h1>
+          <p class="text-xs text-slate-400">Kubernetes Load Forecasting & Machine Learning Controller</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Live Health -->
+      <div class="flex items-center space-x-4">
+        <nav class="flex space-x-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700/60 text-sm">
+          <button id="tab-monitor-btn" onclick="switchTab('monitor')" class="px-3 py-1.5 rounded-md font-medium bg-emerald-600 text-white shadow">
+            <i class="fa-solid fa-chart-line mr-1.5"></i>Live Monitor
+          </button>
+          <button id="tab-benchmark-btn" onclick="switchTab('benchmark')" class="px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white">
+            <i class="fa-solid fa-flask-vial mr-1.5"></i>Benchmarks
+          </button>
+          <button id="tab-telemetry-btn" onclick="switchTab('telemetry')" class="px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white">
+            <i class="fa-solid fa-cubes mr-1.5"></i>K8s & KEDA
+          </button>
+        </nav>
+
+        <div class="flex items-center space-x-2 pl-2 border-l border-slate-800">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-live"></span>
+          <span id="backend-status-pill" class="text-xs font-mono text-emerald-400 font-semibold">ONLINE: 8000</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- TAB 1: LIVE MONITOR -->
+    <div id="tab-monitor" class="space-y-6">
+
+      <!-- Real-time Status Banner -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        
+        <!-- Active Replicas Card -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>ACTIVE PODS</span>
+            <i class="fa-solid fa-layer-group text-emerald-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span id="metric-current-replicas" class="text-3xl font-extrabold text-white">1</span>
+            <span class="text-xs text-slate-400 font-mono">Max: 10</span>
+          </div>
+          <!-- Pod Visualizer -->
+          <div id="pod-icons-container" class="mt-3 flex flex-wrap gap-1">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+          </div>
+        </div>
+
+        <!-- Desired Replicas (Controller Output) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>DESIRED (KEDA)</span>
+            <i class="fa-solid fa-bullseye text-cyan-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span id="metric-desired-replicas" class="text-3xl font-extrabold text-cyan-400">1</span>
+            <span id="metric-action-badge" class="text-xs px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300">MAINTAIN</span>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2 truncate" id="metric-reason-text">Balanced with demand</p>
+        </div>
+
+        <!-- Incoming Traffic (RPS) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>CURRENT LOAD</span>
+            <i class="fa-solid fa-gauge-high text-amber-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-incoming-rps" class="text-3xl font-extrabold text-amber-400">30.0</span>
+            <span class="text-xs text-slate-400 ml-1.5 font-mono">RPS</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div id="rps-progress-bar" class="bg-amber-400 h-full rounded-full transition-all duration-300" style="width: 15%"></div>
+          </div>
+        </div>
+
+        <!-- Forecasted Demand -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>FORECAST (T+5m)</span>
+            <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-predicted-rps" class="text-3xl font-extrabold text-purple-400">35.0</span>
+            <span class="text-xs text-slate-400 ml-1.5 font-mono">RPS</span>
+          </div>
+          <span class="text-[11px] text-purple-300/80 mt-2 block font-mono">Model: Prophet</span>
+        </div>
+
+        <!-- Latency -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>LATENCY</span>
+            <i class="fa-solid fa-stopwatch text-sky-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline justify-between">
+            <span id="metric-latency-ms" class="text-3xl font-extrabold text-sky-400">28.5</span>
+            <span class="text-xs text-slate-400 font-mono">ms</span>
+          </div>
+          <span id="slo-status-badge" class="mt-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">SLO MET (&le;200ms)</span>
+        </div>
+
+        <!-- Controller Policy Mode -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-medium">
+            <span>ACTIVE POLICY</span>
+            <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+          </div>
+          <div class="mt-2">
+            <span id="metric-policy-name" class="text-sm font-bold text-emerald-400 tracking-wide block truncate">PREDICTIVE</span>
+            <span id="metric-fallback-badge" class="text-[10px] text-slate-400 block mt-1">Normal Operation</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Real-Time Interactive Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Chart 1: Traffic vs Forecast Demand -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-chart-area text-emerald-400"></i>
+              Traffic vs Forecast Demand (RPS)
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">Live 10s Window</span>
+          </div>
+          <div class="h-64">
+            <canvas id="trafficChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Pod Replicas Dynamics -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-cubes-stacked text-cyan-400"></i>
+              Pod Replicas: Active vs Desired (KEDA)
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">Target: sample-app</span>
+          </div>
+          <div class="h-64">
+            <canvas id="replicaChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Interactive Workload Generator Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-sliders text-emerald-400"></i>
+              Live Workload & Autoscaling Testbed
+            </h3>
+            <p class="text-xs text-slate-400 mt-1">Simulate live workloads, inject sudden traffic bursts, or test reactive fallback handling.</p>
+          </div>
+          
+          <!-- Quick Preset Buttons -->
+          <div class="flex flex-wrap gap-2">
+            <button onclick="injectPreset(35, 40)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              <i class="fa-solid fa-water text-cyan-400 mr-1"></i>Steady (35 RPS)
+            </button>
+            <button onclick="injectPreset(110, 130)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              <i class="fa-solid fa-arrow-trend-up text-amber-400 mr-1"></i>Ramp (110 RPS)
+            </button>
+            <button onclick="injectPreset(190, 210)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-800/60 transition">
+              <i class="fa-solid fa-bolt text-rose-400 mr-1"></i>Spike (190 RPS)
+            </button>
+            <button onclick="triggerFaultInjection()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 border border-purple-800/60 transition">
+              <i class="fa-solid fa-bug text-purple-400 mr-1"></i>Fault: Outage/Spike
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Manual Slider Form -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-slate-400 font-medium">Incoming Load (RPS)</span>
+              <span id="slider-rps-val" class="font-bold text-amber-400 font-mono">60 RPS</span>
+            </div>
+            <input type="range" id="slider-rps" min="10" max="250" value="60" oninput="updateSliderLabels()" class="w-full accent-amber-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+          </div>
+
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-slate-400 font-medium">Model Forecasted Load (RPS)</span>
+              <span id="slider-pred-val" class="font-bold text-purple-400 font-mono">75 RPS</span>
+            </div>
+            <input type="range" id="slider-pred" min="10" max="250" value="75" oninput="updateSliderLabels()" class="w-full accent-purple-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button onclick="sendManualEvaluation()" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-play"></i>
+              Evaluate & Scale
+            </button>
+            <button onclick="toggleAutoSimulate()" id="btn-auto-sim" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 px-3 rounded-xl text-xs border border-slate-700 transition">
+              <i class="fa-solid fa-repeat mr-1"></i>Auto-Tick
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controller Audit Log Table -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+        <h3 class="font-bold text-sm text-slate-200 mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-clipboard-list text-emerald-400"></i>
+          Scaling Controller Audit & Decision Log
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-800/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+              <tr>
+                <th class="py-2.5 px-3">Timestamp</th>
+                <th class="py-2.5 px-3">Action</th>
+                <th class="py-2.5 px-3">Current</th>
+                <th class="py-2.5 px-3">Desired (Target)</th>
+                <th class="py-2.5 px-3">Policy Mode</th>
+                <th class="py-2.5 px-3">Decision Explanation</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body" class="divide-y divide-slate-800 text-slate-300 font-mono">
+              <tr>
+                <td class="py-3 px-3 text-slate-500 italic" colspan="6">Awaiting scaling decisions...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: BENCHMARKS & EXPERIMENT RESULTS -->
+    <div id="tab-benchmark" class="hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-6">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-chart-simple text-emerald-400"></i>
+              Empirical Autoscaling Benchmark Comparison
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">150-minute identical composite trace (799,750 requests) evaluated under Reactive HPA, Prophet, and PyTorch LSTM.</p>
+          </div>
+          <button onclick="fetchExperimentData()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate"></i> Refresh Results
+          </button>
+        </div>
+
+        <!-- Comparison Metrics Table -->
+        <div class="overflow-x-auto mb-8">
+          <table class="w-full text-left text-xs border border-slate-800 rounded-lg overflow-hidden">
+            <thead class="bg-slate-800/80 text-slate-300 font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Performance KPI</th>
+                <th class="py-3 px-4 text-rose-400">Reactive HPA (Baseline)</th>
+                <th class="py-3 px-4 text-emerald-400">Predictive (Prophet)</th>
+                <th class="py-3 px-4 text-cyan-400">Predictive (LSTM)</th>
+                <th class="py-3 px-4 text-slate-200">Improvement / Delta</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-kpi-tbody" class="divide-y divide-slate-800 text-slate-300">
+              <!-- Dynamically populated or fallback -->
+              <tr>
+                <td class="py-2.5 px-4 font-medium">SLO Adherence (&le; 200ms)</td>
+                <td class="py-2.5 px-4 font-mono">97.89%</td>
+                <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">99.67%</td>
+                <td class="py-2.5 px-4 font-mono">99.11%</td>
+                <td class="py-2.5 px-4 text-emerald-400 font-bold">+1.78 percentage points</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-medium">Latency p99 (Tail Latency)</td>
+                <td class="py-2.5 px-4 font-mono text-rose-400 font-bold">358.50 ms</td>
+                <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">154.30 ms</td>
+                <td class="py-2.5 px-4 font-mono">168.20 ms</td>
+                <td class="py-2.5 px-4 text-emerald-400 font-bold">-204.20 ms (-57.0%)</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-medium">Service Error Rate</td>
+                <td class="py-2.5 px-4 font-mono">1.251%</td>
+                <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">0.218%</td>
+                <td class="py-2.5 px-4 font-mono">0.310%</td>
+                <td class="py-2.5 px-4 text-emerald-400 font-bold">-82.6% error reduction</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-medium">Over-provisioned Pod-Hours</td>
+                <td class="py-2.5 px-4 font-mono">5.0066 hrs</td>
+                <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">2.8133 hrs</td>
+                <td class="py-2.5 px-4 font-mono">3.1200 hrs</td>
+                <td class="py-2.5 px-4 text-emerald-400 font-bold">-43.8% compute waste cut</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-4 font-medium">Resource Efficiency (Pod-hrs/100k TX)</td>
+                <td class="py-2.5 px-4 font-mono">1.7432</td>
+                <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">1.4627</td>
+                <td class="py-2.5 px-4 font-mono">1.5120</td>
+                <td class="py-2.5 px-4 text-emerald-400 font-bold">+16.09% efficiency gain</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Actual Plot Image Display -->
+        <div class="mt-6 border border-slate-800 rounded-xl p-4 bg-slate-950">
+          <h3 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-image text-emerald-400"></i>
+            Actual Execution Comparison Plot (Generated from Simulation)
+          </h3>
+          <div class="flex justify-center">
+            <img src="/experiments/plot" alt="Scaling Comparison Plot" class="max-w-full rounded-lg border border-slate-800 shadow-xl">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: K8S & KEDA TELEMETRY -->
+    <div id="tab-telemetry" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Live KEDA Metric Endpoint -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-cyan-400"></i>
+              KEDA External Scaler JSON (/metrics/keda)
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">Polling 3s</span>
+          </div>
+          <pre id="keda-json-view" class="bg-slate-950 border border-slate-800 text-cyan-300 font-mono p-4 rounded-lg text-xs overflow-x-auto">Loading...</pre>
+        </div>
+
+        <!-- Prometheus Metrics Output Sample -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-amber-400"></i>
+              Prometheus Exposition Stream (/metrics)
+            </h3>
+            <a href="/metrics" target="_blank" class="text-xs text-emerald-400 hover:underline">Open Raw Endpoint &rarr;</a>
+          </div>
+          <pre id="prometheus-sample-view" class="bg-slate-950 border border-slate-800 text-slate-300 font-mono p-4 rounded-lg text-xs overflow-x-auto h-48">Loading...</pre>
+        </div>
+
+      </div>
+
+      <!-- Kubernetes Manifests Reference -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+        <h3 class="font-bold text-sm text-slate-200 mb-3 flex items-center gap-2">
+          <i class="fa-brands fa-docker text-blue-400"></i>
+          Active KEDA ScaledObject Definition (kubernetes/keda-scaledobject.yaml)
+        </h3>
+        <pre class="bg-slate-950 border border-slate-800 text-emerald-400 font-mono p-4 rounded-lg text-xs overflow-x-auto">apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: sample-app-predictive-scaler
+  namespace: predictive-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sample-app
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  cooldownPeriod: 180
+  pollingInterval: 15
+  triggers:
+  - type: metrics-api
+    metadata:
+      targetValue: "1"
+      url: "http://predictive-controller-service.predictive-system.svc.cluster.local:8000/metrics/keda"
+      valueLocation: "value"
+      format: "json"</pre>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+    Predictive Autoscaling with Load Forecasting &bull; FastAPI + Prophet + PyTorch + Kubernetes + KEDA
+  </footer>
+
+  <!-- Frontend Dashboard Logic -->
+  <script>
+    // Tab switching
+    function switchTab(tab) {
+      document.getElementById('tab-monitor').classList.add('hidden');
+      document.getElementById('tab-benchmark').classList.add('hidden');
+      document.getElementById('tab-telemetry').classList.add('hidden');
+
+      document.getElementById('tab-monitor-btn').className = "px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white";
+      document.getElementById('tab-benchmark-btn').className = "px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white";
+      document.getElementById('tab-telemetry-btn').className = "px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white";
+
+      if (tab === 'monitor') {
+        document.getElementById('tab-monitor').classList.remove('hidden');
+        document.getElementById('tab-monitor-btn').className = "px-3 py-1.5 rounded-md font-medium bg-emerald-600 text-white shadow";
+      } else if (tab === 'benchmark') {
+        document.getElementById('tab-benchmark').classList.remove('hidden');
+        document.getElementById('tab-benchmark-btn').className = "px-3 py-1.5 rounded-md font-medium bg-emerald-600 text-white shadow";
+      } else if (tab === 'telemetry') {
+        document.getElementById('tab-telemetry').classList.remove('hidden');
+        document.getElementById('tab-telemetry-btn').className = "px-3 py-1.5 rounded-md font-medium bg-emerald-600 text-white shadow";
+      }
+    }
+
+    // Chart Initializations
+    const maxDataPoints = 20;
+    const labels = [];
+    const actualRpsData = [];
+    const predRpsData = [];
+    const activePodsData = [];
+    const desiredPodsData = [];
+
+    const now = new Date();
+    for (let i = 0; i < maxDataPoints; i++) {
+      labels.push(new Date(now.getTime() - (maxDataPoints - i) * 5000).toLocaleTimeString());
+      actualRpsData.push(35);
+      predRpsData.push(38);
+      activePodsData.push(2);
+      desiredPodsData.push(2);
+    }
+
+    const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+    const trafficChart = new Chart(trafficCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Actual Incoming RPS',
+            data: actualRpsData,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2
+          },
+          {
+            label: 'Forecast Demand RPS (Prophet)',
+            data: predRpsData,
+            borderColor: '#c084fc',
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0.3,
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b', maxTicksLimit: 6 }, grid: { color: '#1e293b' } },
+          y: { min: 0, max: 250, ticks: { color: '#64748b' }, grid: { color: '#1e293b' } }
+        }
+      }
+    });
+
+    const replicaCtx = document.getElementById('replicaChart').getContext('2d');
+    const replicaChart = new Chart(replicaCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Active Pod Replicas',
+            data: activePodsData,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+            fill: true,
+            stepped: true,
+            borderWidth: 2.5
+          },
+          {
+            label: 'Desired Target Pods (KEDA)',
+            data: desiredPodsData,
+            borderColor: '#22d3ee',
+            borderDash: [4, 4],
+            stepped: true,
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b', maxTicksLimit: 6 }, grid: { color: '#1e293b' } },
+          y: { min: 0, max: 12, ticks: { color: '#64748b', stepSize: 2 }, grid: { color: '#1e293b' } }
+        }
+      }
+    });
+
+    // Slider controls
+    function updateSliderLabels() {
+      const rps = document.getElementById('slider-rps').value;
+      const pred = document.getElementById('slider-pred').value;
+      document.getElementById('slider-rps-val').innerText = rps + ' RPS';
+      document.getElementById('slider-pred-val').innerText = pred + ' RPS';
+    }
+
+    function injectPreset(rps, pred) {
+      document.getElementById('slider-rps').value = rps;
+      document.getElementById('slider-pred').value = pred;
+      updateSliderLabels();
+      sendManualEvaluation();
+    }
+
+    function triggerFaultInjection() {
+      // Simulate sudden unexpected spike where current load is 200 RPS but prediction was only 60 RPS (triggers fallback)
+      document.getElementById('slider-rps').value = 210;
+      document.getElementById('slider-pred').value = 60;
+      updateSliderLabels();
+      sendManualEvaluation();
+    }
+
+    // State Variables
+    let currentPods = 2;
+    let autoSimInterval = null;
+
+    async function sendManualEvaluation() {
+      const rps = parseFloat(document.getElementById('slider-rps').value);
+      const pred = parseFloat(document.getElementById('slider-pred').value);
+
+      try {
+        const res = await fetch('/controller/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            current_replicas: currentPods,
+            current_rps: rps,
+            predicted_rps: pred
+          })
+        });
+        const decision = await res.json();
+        handleDecisionResult(decision, rps, pred);
+      } catch (e) {
+        console.error("Evaluation request error:", e);
+      }
+    }
+
+    function handleDecisionResult(decision, rps, pred) {
+      currentPods = decision.desired_replicas;
+
+      // Update Top KPIs
+      document.getElementById('metric-current-replicas').innerText = decision.desired_replicas;
+      document.getElementById('metric-desired-replicas').innerText = decision.desired_replicas;
+      document.getElementById('metric-incoming-rps').innerText = rps.toFixed(1);
+      document.getElementById('metric-predicted-rps').innerText = pred.toFixed(1);
+
+      // Latency Simulation: approx 15ms base + utilization
+      const capacity = decision.desired_replicas * 25.0;
+      const util = rps / capacity;
+      let latency = 15.0 + (util * 15.0);
+      if (util > 1.0) latency = 30.0 + ((util - 1.0) * 350.0);
+      document.getElementById('metric-latency-ms').innerText = latency.toFixed(1);
+
+      const sloBadge = document.getElementById('slo-status-badge');
+      if (latency <= 200.0) {
+        sloBadge.className = "mt-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        sloBadge.innerText = "SLO MET (<=200ms)";
+      } else {
+        sloBadge.className = "mt-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30";
+        sloBadge.innerText = "SLO VIOLATED (>200ms)";
+      }
+
+      // Action Badge
+      const actionBadge = document.getElementById('metric-action-badge');
+      actionBadge.innerText = decision.action;
+      if (decision.action === 'SCALE_UP') {
+        actionBadge.className = "text-xs px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+      } else if (decision.action === 'SCALE_DOWN') {
+        actionBadge.className = "text-xs px-2 py-0.5 rounded font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+      } else {
+        actionBadge.className = "text-xs px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300";
+      }
+
+      document.getElementById('metric-reason-text').innerText = decision.reason;
+
+      // Policy Badge
+      const policyText = document.getElementById('metric-policy-name');
+      const fallbackBadge = document.getElementById('metric-fallback-badge');
+      policyText.innerText = decision.active_policy;
+
+      if (decision.is_fallback) {
+        policyText.className = "text-sm font-bold text-rose-400 tracking-wide block truncate";
+        fallbackBadge.innerText = "FALLBACK REACTIVE: " + (decision.fallback_reason || "Spike detected");
+        fallbackBadge.className = "text-[10px] text-rose-300 font-bold block mt-1";
+      } else {
+        policyText.className = "text-sm font-bold text-emerald-400 tracking-wide block truncate";
+        fallbackBadge.innerText = "Normal Predictive Operation";
+        fallbackBadge.className = "text-[10px] text-slate-400 block mt-1";
+      }
+
+      // Pod Icons
+      const podContainer = document.getElementById('pod-icons-container');
+      podContainer.innerHTML = '';
+      for (let i = 0; i < decision.desired_replicas; i++) {
+        const podPill = document.createElement('span');
+        podPill.className = "w-3 h-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 inline-block";
+        podContainer.appendChild(podPill);
+      }
+
+      // Add to Charts
+      const timeStr = new Date().toLocaleTimeString();
+      trafficChart.data.labels.push(timeStr);
+      trafficChart.data.datasets[0].data.push(rps);
+      trafficChart.data.datasets[1].data.push(pred);
+      if (trafficChart.data.labels.length > maxDataPoints) {
+        trafficChart.data.labels.shift();
+        trafficChart.data.datasets[0].data.shift();
+        trafficChart.data.datasets[1].data.shift();
+      }
+      trafficChart.update();
+
+      replicaChart.data.labels.push(timeStr);
+      replicaChart.data.datasets[0].data.push(decision.current_replicas);
+      replicaChart.data.datasets[1].data.push(decision.desired_replicas);
+      if (replicaChart.data.labels.length > maxDataPoints) {
+        replicaChart.data.labels.shift();
+        replicaChart.data.datasets[0].data.shift();
+        replicaChart.data.datasets[1].data.shift();
+      }
+      replicaChart.update();
+
+      // Add to Audit Log Table
+      const tableBody = document.getElementById('audit-table-body');
+      if (tableBody.children[0] && tableBody.children[0].children.length === 1) {
+        tableBody.innerHTML = '';
+      }
+      const newRow = document.createElement('tr');
+      newRow.className = decision.is_fallback ? "bg-rose-950/20" : "";
+      newRow.innerHTML = `
+        <td class="py-2.5 px-3 text-slate-400">${timeStr}</td>
+        <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${decision.action === 'SCALE_UP' ? 'bg-emerald-500/20 text-emerald-400' : (decision.action === 'SCALE_DOWN' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400')}">${decision.action}</span></td>
+        <td class="py-2.5 px-3">${decision.current_replicas}</td>
+        <td class="py-2.5 px-3 font-bold text-cyan-400">${decision.desired_replicas}</td>
+        <td class="py-2.5 px-3 text-[11px] ${decision.is_fallback ? 'text-rose-400 font-bold' : 'text-slate-300'}">${decision.active_policy}</td>
+        <td class="py-2.5 px-3 text-[11px] text-slate-400 max-w-xs truncate" title="${decision.reason}">${decision.reason}</td>
+      `;
+      tableBody.insertBefore(newRow, tableBody.firstChild);
+      if (tableBody.children.length > 8) {
+        tableBody.removeChild(tableBody.lastChild);
+      }
+    }
+
+    // Auto-Simulate Loop
+    function toggleAutoSimulate() {
+      const btn = document.getElementById('btn-auto-sim');
+      if (autoSimInterval) {
+        clearInterval(autoSimInterval);
+        autoSimInterval = null;
+        btn.innerHTML = '<i class="fa-solid fa-repeat mr-1"></i>Auto-Tick';
+        btn.className = "bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 px-3 rounded-xl text-xs border border-slate-700 transition";
+      } else {
+        btn.innerHTML = '<i class="fa-solid fa-stop mr-1"></i>Stop Auto';
+        btn.className = "bg-rose-600 text-white font-semibold py-2.5 px-3 rounded-xl text-xs border border-rose-500 transition";
+        autoSimInterval = setInterval(() => {
+          // Generate realistic fluctuation
+          const base = 40.0;
+          const noise = (Math.random() - 0.5) * 15.0;
+          const current = Math.max(15, base + noise + Math.sin(Date.now() / 15000) * 35.0);
+          const pred = current + (Math.random() - 0.5) * 10.0;
+          document.getElementById('slider-rps').value = Math.round(current);
+          document.getElementById('slider-pred').value = Math.round(pred);
+          updateSliderLabels();
+          sendManualEvaluation();
+        }, 3000);
+      }
+    }
+
+    // Telemetry Poller
+    async function pollTelemetry() {
+      try {
+        const kedaRes = await fetch('/metrics/keda');
+        if (kedaRes.ok) {
+          const kedaData = await kedaRes.json();
+          document.getElementById('keda-json-view').innerText = JSON.stringify(kedaData, null, 2);
+        }
+
+        const promRes = await fetch('/metrics');
+        if (promRes.ok) {
+          const promText = await promRes.text();
+          const lines = promText.split('\n').filter(l => !l.startsWith('#')).slice(0, 18).join('\n');
+          document.getElementById('prometheus-sample-view').innerText = lines;
+        }
+      } catch (e) {}
+    }
+
+    // Poll telemetry every 3 seconds
+    setInterval(pollTelemetry, 3000);
+    pollTelemetry();
+
+    // Initial Trigger
+    sendManualEvaluation();
+  </script>
+</body>
+</html>

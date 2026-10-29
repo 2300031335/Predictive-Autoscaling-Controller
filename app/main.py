@@ -1,10 +1,14 @@
-"""FastAPI application entrypoint exposing API, forecasting, metrics, and controller."""
+"""FastAPI application entrypoint exposing API, forecasting, metrics, controller, and web dashboard."""
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -51,6 +55,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files if directory exists
+static_path = Path("static")
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 class ControllerEvaluationRequest(BaseModel):
     current_replicas: int = Field(default=1, ge=1)
@@ -60,18 +69,35 @@ class ControllerEvaluationRequest(BaseModel):
     forecast_error_mape: Optional[float] = Field(default=5.0, ge=0.0)
 
 
-@app.get("/", summary="API Root")
-def root():
+@app.get("/", summary="Web Dashboard Frontend", response_class=HTMLResponse)
+def index_frontend():
+    """Serves the interactive web UI dashboard."""
+    html_file = Path("static/index.html")
+    if html_file.exists():
+        return FileResponse(html_file)
+    return HTMLResponse("<h1>Predictive Autoscaler API</h1><p>Visit <a href='/docs'>/docs</a> for Swagger UI.</p>")
+
+
+@app.get("/dashboard", summary="Dashboard Alias", response_class=HTMLResponse)
+def dashboard_frontend():
+    return index_frontend()
+
+
+@app.get("/api/info", summary="API Metadata")
+def api_info():
     return {
         "service": settings.APP_NAME,
         "version": "1.0.0",
         "endpoints": {
+            "dashboard": "/",
             "health": "/health",
             "forecast": "/forecast",
             "latest_forecast": "/forecast/latest",
             "controller_status": "/controller/status",
             "metrics": "/metrics",
             "keda_metric": "/metrics/keda",
+            "experiments_plot": "/experiments/plot",
+            "experiments_summary": "/api/experiments/summary",
         },
     }
 
@@ -130,7 +156,6 @@ def get_controller_status():
 
 @app.post("/controller/evaluate", response_model=ScalingDecision, summary="Trigger scaling controller evaluation")
 def evaluate_controller(req: ControllerEvaluationRequest):
-    # Use supplied predicted_rps or fetch from latest forecast
     pred_rps = req.predicted_rps
     if pred_rps is None:
         latest = forecast_service.get_latest_forecast()
@@ -175,6 +200,30 @@ def metrics():
     """Exposes all Prometheus telemetry in standard format."""
     payload = MetricsExporter.generate_prometheus_payload()
     return Response(content=payload, media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+@app.get("/experiments/plot", summary="Get Experiment Comparison Visualization PNG")
+def get_experiment_plot():
+    plot_file = Path("experiments/results/scaling_comparison_plot.png")
+    if not plot_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment comparison plot not found. Run experiments/compare_results.py first.",
+        )
+    return FileResponse(plot_file, media_type="image/png")
+
+
+@app.get("/api/experiments/summary", summary="Get Benchmark Summary JSON")
+def get_experiment_summary():
+    summary_file = Path("experiments/results/experiment_summary.json")
+    if not summary_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment summary JSON not found. Run experiments/run_experiment.py first.",
+        )
+    with open(summary_file, "r") as f:
+        data = json.load(f)
+    return data
 
 
 if __name__ == "__main__":
